@@ -1,11 +1,16 @@
 //package broadcast provides a broadcast channel for event loops.
 package broadcast
 
-type broadcast struct {
-	subscribers []*bchan
-	sub         chan *bchan
+//Broadcast represents a broadcast channel. Broadcast channels have a goroutine that takes messages from Send and transmits them to all subscriber channels.
+type Broadcast struct {
+	subscribers []chan interface{}
+	sub         chan chan interface
 	unsub       chan int
-	bufsize     int
+	//Send is the broadcast channel. All subscribers receive
+	//interfaces sent on this channel. Do not close this channel. 
+	//Instead, call the Close() method to close down all both the 
+	//Send channel and all subscriber channels.
+	Send        chan<-interface{}
 }
 
 //run is the broadcast event loop. It dies when all subscribers Close.
@@ -27,43 +32,31 @@ func (b *broadcast) run() {
 	}
 }
 
-type bchan struct {
-	send chan interface{}
-	recv chan interface{}
+//New creates a Broadcast with the given buffer size on the Send channel.
+func New(n int) *Broadcast {
+
 }
 
-func (b *bchan) close() {
-	close(b.send)
-	close(b.recv)
+//Subscribe returns a new subscriber channel with the given buffer size.
+func (b *Broadcast) Subscribe(n int) <-chan interface{} {
+	c := make(chan interface{}, n)
+	b.sub <- c
+	return c
 }
 
+//Close closes the broadcast channel and all subscriber channels.
+func (*Broadcast) Close() {
+
+}
+
+//Chan
 type Chan struct {
-	Send chan<- interface{}
-	Recv <-chan interface{}
-	id   int
-	bc   *broadcast
+	b *Broadcast
+	id int
+	Rcv <-chan interface{}
 }
 
-func New(n int) *Chan {
-	//TODO init broadcast
-	go func() {
-		defer close(bc.sub)
-		defer close(bc.unsub)
-		bc.run()
-	}()
-}
+//Close unsubscribes from a Broadcast channel. You should always Close an unused Chan, because eventually (depending on the size of the Chan's buffer) the Broadcast will block trying to send a message to it, and no other subscribed channels will receive messages. Alternatively, closing the Broadcast this Chan is subscribed to will close the Chan.
+func (*Chan) Close() {
 
-func (c *Chan) Close() {
-	//TODO should I call close here, or in run() ?
-	c.bc.subscribers[c.id].close()
-	c.bc.unsub <- c.id
-}
-
-//Is having a Chan beget more Chans make sense? Is this better than
-//having a public Broadcast type whose only purpose is to beget Chans?
-func (c *Chan) Subscribe() *Chan {
-	s := make(chan<- interface{}, c.bf.bufsize)
-	r := make(chan<- interface{}, c.bf.bufsize)
-	c.bc.sub <- bchan{s, r}
-	return &Chan{s, r, len(c.bc.subscribers) - 1, bc}
 }
