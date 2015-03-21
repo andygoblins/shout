@@ -3,12 +3,12 @@
 package shout
 
 //Shout represents a broadcast channel. Each Shout instance has a 
-//goroutine that takes messages from the Send channel and transmits them 
-//to all subscribed Listen channels.
+//goroutine that takes messages from the Send channel and transmits 
+//them to all subscribed Listen channels.
 type Shout struct {
-	subscribers []chan interface{}
+	subscribers map[chan chan interface{}] bool
 	sub         chan chan interface{}
-	unsub       chan int
+	unsub       chan *Listen
 	send        chan interface{}
 }
 
@@ -25,15 +25,15 @@ func (b *Shout) run() {
 	for {
 		select {
 		case s := <-sub:
-			subscribers = append(subscribers, s)
-		case i := <-unsub:
-			subscribers = append(subscribers[:i], subscribers[i+1:]...)
+			subscribers[s] = true
+		case s := <-unsub:
+			delete(subscribers, s)
 		case m, ok := <-send:
 			if !ok {
 				panic("Send channel is closed")
 			}
-			for _, v := range subscribers {
-				v <- m
+			for k := range subscribers {
+				k <- m
 			}
 		}
 	}
@@ -41,14 +41,15 @@ func (b *Shout) run() {
 
 //New creates a Shout with the given buffer size on the Send channel.
 func New(n int) *Shout {
+	s := Shout{}
 	//TODO
 }
 
 //Listen returns a new Listen channel with the given buffer size.
-func (b *Shout) Listen(n int) <-chan interface{} {
+func (b *Shout) Listen(n int) *Listen {
 	c := make(chan interface{}, n)
 	b.sub <- c
-	return c
+	return &Listen{b, c}
 }
 
 //Close closes the Shout broadcast channel and all subscriber channels.
@@ -59,7 +60,6 @@ func (*Shout) Close() {
 //Listen is a receiving channel for Shout broadcast messages. 
 type Listen struct {
 	b   *Shout
-	id  int
 	rcv chan interface{}
 }
 
