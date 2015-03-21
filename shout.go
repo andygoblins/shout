@@ -8,7 +8,7 @@ package shout
 type Shout struct {
 	subscribers map[chan chan interface{}] bool
 	sub         chan chan interface{}
-	unsub       chan *Listen
+	unsub       chan chan interface{}
 	send        chan interface{}
 }
 
@@ -20,13 +20,16 @@ func (*Shout) Send() chan<- interface{} {
 	return b.send
 }
 
-//run is the Shout event loop. It dies when all Listen channels Close.
+//run is the Shout event loop. It dies when unsub is closed.
 func (b *Shout) run() {
 	for {
 		select {
 		case s := <-sub:
 			subscribers[s] = true
-		case s := <-unsub:
+		case s, ok := <-unsub:
+			if !ok {
+				return
+			}
 			delete(subscribers, s)
 		case m, ok := <-send:
 			if !ok {
@@ -42,7 +45,12 @@ func (b *Shout) run() {
 //New creates a Shout with the given buffer size on the Send channel.
 func New(n int) *Shout {
 	s := Shout{}
-	//TODO
+	s.subscribers = make(map[chan chan interface{}] bool)
+	s.sub = make(chan chan interface{})
+	s.unsub = make(chan chan interface{})
+	s.send = make(chan interface{})
+	go s.run()
+	return &s
 }
 
 //Listen returns a new Listen channel with the given buffer size.
@@ -54,7 +62,12 @@ func (b *Shout) Listen(n int) *Listen {
 
 //Close closes the Shout broadcast channel and all subscriber channels.
 func (*Shout) Close() {
-	//TODO
+	for k := range subscribers {
+		close(k)
+	}
+	close(s.unsub) //this causes run() to return
+	close(s.sub)
+	close(s.send)
 }
 
 //Listen is a receiving channel for Shout broadcast messages. 
