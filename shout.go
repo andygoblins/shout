@@ -1,42 +1,42 @@
-//package shout provides a broadcast channel that works in select 
+//package shout provides a broadcast channel that works in select
 //statements.
 package shout
 
-//Shout represents a broadcast channel. Each Shout instance has a 
-//goroutine that takes messages from the Send channel and transmits 
+//Shout represents a broadcast channel. Each Shout instance has a
+//goroutine that takes messages from the Send channel and transmits
 //them to all subscribed Listen channels.
 type Shout struct {
-	subscribers map[chan chan interface{}] bool
+	subscribers map[chan interface{}]bool
 	sub         chan chan interface{}
 	unsub       chan chan interface{}
 	send        chan interface{}
 }
 
-//Send returns the broadcast channel. All Listen channels receive 
-//messages sent on this channel. Closing this channel causes a panic. 
-//Use the Close() method to close down both the Send channel and all 
+//Send returns the broadcast channel. All Listen channels receive
+//messages sent on this channel. Closing this channel causes a panic.
+//Use the Close() method to close down both the Send channel and all
 //Listen channels.
-func (*Shout) Send() chan<- interface{} {
+func (b *Shout) Send() chan<- interface{} {
 	return b.send
 }
 
 //run is the Shout event loop. It dies when unsub is closed.
-func (b *Shout) run() {
+func (s *Shout) run() {
 	for {
 		select {
-		case s := <-sub:
-			subscribers[s] = true
-		case s, ok := <-unsub:
+		case sub := <-s.sub:
+			s.subscribers[sub] = true
+		case unsub, ok := <-s.unsub:
 			if !ok {
 				return
 			}
-			delete(subscribers, s)
-		case m, ok := <-send:
+			delete(s.subscribers, unsub)
+		case msg, ok := <-s.send:
 			if !ok {
 				panic("Send channel is closed")
 			}
-			for k := range subscribers {
-				k <- m
+			for key := range s.subscribers {
+				key <- msg
 			}
 		}
 	}
@@ -45,7 +45,7 @@ func (b *Shout) run() {
 //New creates a Shout with the given buffer size on the Send channel.
 func New(n int) *Shout {
 	s := Shout{}
-	s.subscribers = make(map[chan chan interface{}] bool)
+	s.subscribers = make(map[chan interface{}]bool)
 	s.sub = make(chan chan interface{})
 	s.unsub = make(chan chan interface{})
 	s.send = make(chan interface{})
@@ -54,15 +54,15 @@ func New(n int) *Shout {
 }
 
 //Listen returns a new Listen channel with the given buffer size.
-func (b *Shout) Listen(n int) *Listen {
+func (s *Shout) Listen(n int) *Listen {
 	c := make(chan interface{}, n)
-	b.sub <- c
-	return &Listen{b, c}
+	s.sub <- c
+	return &Listen{s, c}
 }
 
 //Close closes the Shout broadcast channel and all subscriber channels.
-func (*Shout) Close() {
-	for k := range subscribers {
+func (s *Shout) Close() {
+	for k := range s.subscribers {
 		close(k)
 	}
 	close(s.unsub) //this causes run() to return
@@ -70,9 +70,9 @@ func (*Shout) Close() {
 	close(s.send)
 }
 
-//Listen is a receiving channel for Shout broadcast messages. 
+//Listen is a receiving channel for Shout broadcast messages.
 type Listen struct {
-	b   *Shout
+	s   *Shout
 	rcv chan interface{}
 }
 
@@ -81,11 +81,12 @@ func (c *Listen) Rcv() chan<- interface{} {
 	return c.rcv
 }
 
-//Close unsubscribes Listen from a Shout channel. You should always 
-//Close an unused Listen, because eventually Shout will block trying to 
-//send a message to it, and no other subscribed Listen channels will 
-//receive messages. Alternatively, closing the Shout this Listen is 
+//Close unsubscribes Listen from a Shout channel. You should always
+//Close an unused Listen, because eventually Shout will block trying to
+//send a message to it, and no other subscribed Listen channels will
+//receive messages. Alternatively, closing the Shout this Listen is
 //subscribed to will close the Listen.
-func (*Listen) Close() {
-	//TODO
+func (c *Listen) Close() {
+	c.s.unsub <- c.rcv
+	close(c.rcv)
 }
