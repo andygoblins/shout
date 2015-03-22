@@ -48,7 +48,7 @@ func New(n int) *Shout {
 	s.subscribers = make(map[chan interface{}]bool)
 	s.sub = make(chan chan interface{})
 	s.unsub = make(chan chan interface{})
-	s.send = make(chan interface{})
+	s.send = make(chan interface{}, n)
 	go s.run()
 	return &s
 }
