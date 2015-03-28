@@ -77,7 +77,7 @@ type Listen struct {
 }
 
 //Rcv returns the receiving channel for Shout broadcast messages.
-func (c *Listen) Rcv() chan<- interface{} {
+func (c *Listen) Rcv() <-chan interface{} {
 	return c.rcv
 }
 
