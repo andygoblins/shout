@@ -58,13 +58,3 @@ func TestClose(t *testing.T) {
 		}
 	}
 }
-
-func TestCloseSend(t *testing.T) {
-	defer func() {
-		if err := recover(); err == nil {
-			t.Error("Shout didn't panic when Send() was closed.")
-		}
-	}()
-	s := shout.New(1)
-	close(s.Send())
-}
