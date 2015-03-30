@@ -2,14 +2,16 @@
 //statements.
 package shout
 
+import "sync"
+
 //Shout represents a broadcast channel. Each Shout instance has a
 //goroutine that takes messages from the Send channel and transmits
 //them to all subscribed Listen channels.
 type Shout struct {
+	msub        sync.Mutex //subscribers mutex
 	subscribers map[chan interface{}]bool
-	sub         chan chan interface{}
-	unsub       chan chan interface{}
 	send        chan interface{}
+	done        chan struct{}
 }
 
 //Send returns the broadcast channel. All Listen channels receive
@@ -20,24 +22,22 @@ func (b *Shout) Send() chan<- interface{} {
 	return b.send
 }
 
-//run is the Shout event loop. It dies when unsub is closed.
+//run is the Shout event loop. It returns when it receives a message
+//on s.done.
 func (s *Shout) run() {
 	for {
 		select {
-		case sub := <-s.sub:
-			s.subscribers[sub] = true
-		case unsub, ok := <-s.unsub:
-			if !ok {
-				return
-			}
-			delete(s.subscribers, unsub)
 		case msg, ok := <-s.send:
 			if !ok {
 				panic("Send channel is closed")
 			}
+			s.msub.Lock()
 			for key := range s.subscribers {
 				key <- msg
 			}
+			s.msub.Unlock()
+		case <-s.done:
+			return
 		}
 	}
 }
@@ -46,27 +46,31 @@ func (s *Shout) run() {
 func New(n int) *Shout {
 	s := Shout{}
 	s.subscribers = make(map[chan interface{}]bool)
-	s.sub = make(chan chan interface{})
-	s.unsub = make(chan chan interface{})
 	s.send = make(chan interface{}, n)
+	s.done = make(chan struct{})
 	go s.run()
 	return &s
 }
 
 //Listen returns a new Listen channel with the given buffer size.
 func (s *Shout) Listen(n int) *Listen {
+	s.msub.Lock()
+	defer s.msub.Unlock()
 	c := make(chan interface{}, n)
-	s.sub <- c
+	s.subscribers[c] = true
 	return &Listen{s, c}
 }
 
 //Close closes the Shout broadcast channel and all subscriber channels.
 func (s *Shout) Close() {
+	s.msub.Lock()
+	defer s.msub.Unlock()
 	for k := range s.subscribers {
 		close(k)
 	}
-	close(s.unsub) //this causes run() to return
-	close(s.sub)
+	//Tell run() to return. Can't do close(s.done) because the
+	//close(s.send) might be processed by run() first, causing a panic.
+	s.done <- struct{}{}
 	close(s.send)
 }
 
@@ -84,9 +88,10 @@ func (c *Listen) Rcv() <-chan interface{} {
 //Close unsubscribes Listen from a Shout channel. You should always
 //Close an unused Listen, because eventually Shout will block trying to
 //send a message to it, and no other subscribed Listen channels will
-//receive messages. Alternatively, closing the Shout this Listen is
-//subscribed to will close the Listen.
+//receive messages.
 func (c *Listen) Close() {
-	c.s.unsub <- c.rcv
+	c.s.msub.Lock()
+	defer c.s.msub.Unlock()
+	delete(c.s.subscribers, c.rcv)
 	close(c.rcv)
 }
