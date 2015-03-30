@@ -11,6 +11,7 @@ func ExampleShout() {
 	var wg sync.WaitGroup
 
 	s := shout.New(1)
+	defer s.Close()
 	//Start listeners
 	for i := 0; i < listeners; i++ {
 		l := s.Listen(0)
