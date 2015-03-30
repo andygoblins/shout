@@ -10,7 +10,7 @@ var size = 5 //arbitrary
 func TestNewShout(t *testing.T) {
 	s := shout.New(5)
 	defer s.Close()
-	if len(s.Send()) != size {
+	if cap(s.Send()) != size {
 		t.Fatalf("New Shout should have size %d but has size %d\n", size, len(s.Send()))
 	}
 }
@@ -19,7 +19,7 @@ func TestNewListen(t *testing.T) {
 	s := shout.New(0)
 	defer s.Close()
 	l := s.Listen(size)
-	if len(l.Rcv()) != size {
+	if cap(l.Rcv()) != size {
 		t.Fatalf("New Listen should have size %d but has size %d\n", size, len(l.Rcv()))
 	}
 }
