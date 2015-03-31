@@ -1,12 +1,12 @@
-//package shout provides a broadcast channel that works in select
+//package shout provides broadcast channels that work in select
 //statements.
 package shout
 
 import "sync"
 
-//Shout represents a broadcast channel. Each Shout instance has a
-//goroutine that takes messages from the Send channel and transmits
-//them to all subscribed Listen channels.
+//Shout represents a broadcast channel.
+//Each Shout instance has a goroutine that takes messages from the
+//Send channel and transmits them to all subscribed Listen channels.
 type Shout struct {
 	msub        sync.Mutex //subscribers mutex
 	subscribers map[chan interface{}]bool
@@ -14,16 +14,16 @@ type Shout struct {
 	done        chan struct{}
 }
 
-//Send returns the broadcast channel. All Listen channels receive
-//messages sent on this channel. Closing this channel causes a panic.
-//Use the Close() method to close down both the Send channel and all
-//Listen channels.
+//Send returns the broadcast channel.
+//All Listen channels receive messages sent on this channel. Closing
+//this channel causes a panic. Use the Close() method to close down
+//both the Send channel and all Listen channels.
 func (b *Shout) Send() chan<- interface{} {
 	return b.send
 }
 
-//run is the Shout event loop. It returns when it receives a message
-//on s.done.
+//run is the Shout event loop.
+//It returns when it receives a message on s.done.
 func (s *Shout) run() {
 	for {
 		select {
@@ -42,7 +42,9 @@ func (s *Shout) run() {
 	}
 }
 
-//New creates a Shout with the given buffer size on the Send channel.
+//New creates a Shout with the given buffer size for the Send channel.
+//New starts the Shout goroutine that takes messages from Send and
+//transmits them to all subscribed Listens.
 func New(n int) *Shout {
 	s := Shout{}
 	s.subscribers = make(map[chan interface{}]bool)
@@ -85,10 +87,11 @@ func (c *Listen) Rcv() <-chan interface{} {
 	return c.rcv
 }
 
-//Close unsubscribes Listen from a Shout channel. You should always
-//Close an unused Listen, because eventually Shout will block trying to
-//send a message to it, and no other subscribed Listen channels will
-//receive messages.
+//Close unsubscribes Listen from a Shout channel.
+//If an unused Listen is not Closed, the Shout will eventually
+//(depends on size of Rcv buffer) block trying to send a message to
+//it, and no other subscribed Listen channels will receive messages.
+//Closing a Shout will also close all subscribed Listens.
 func (c *Listen) Close() {
 	c.s.msub.Lock()
 	defer c.s.msub.Unlock()
