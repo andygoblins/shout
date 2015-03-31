@@ -18,6 +18,7 @@ func ExampleShout() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer l.Close()
 			fmt.Printf("Received %s from s\n", <-l.Rcv())
 		}()
 	}
