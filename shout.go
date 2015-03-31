@@ -8,10 +8,11 @@ import "sync"
 //Each Shout instance has a goroutine that takes messages from the
 //Send channel and transmits them to all subscribed Listen channels.
 type Shout struct {
-	msub        sync.Mutex //subscribers mutex
+	m           sync.Mutex //mutex for subscribers and closed
 	subscribers map[chan interface{}]bool
 	send        chan interface{}
 	done        chan struct{}
+	closed      bool
 }
 
 //Send returns the broadcast channel.
@@ -31,11 +32,11 @@ func (s *Shout) run() {
 			if !ok {
 				panic("Send channel is closed")
 			}
-			s.msub.Lock()
+			s.m.Lock()
 			for key := range s.subscribers {
 				key <- msg
 			}
-			s.msub.Unlock()
+			s.m.Unlock()
 		case <-s.done:
 			return
 		}
@@ -55,9 +56,13 @@ func New(n int) *Shout {
 }
 
 //Listen returns a new Listen channel with the given buffer size.
+//Listen will panic if Shout is closed.
 func (s *Shout) Listen(n int) *Listen {
-	s.msub.Lock()
-	defer s.msub.Unlock()
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.closed {
+		panic("Listen to closed shout channel")
+	}
 	c := make(chan interface{}, n)
 	s.subscribers[c] = true
 	return &Listen{s, c}
@@ -65,8 +70,11 @@ func (s *Shout) Listen(n int) *Listen {
 
 //Close closes the Shout broadcast channel and all subscriber channels.
 func (s *Shout) Close() {
-	s.msub.Lock()
-	defer s.msub.Unlock()
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.closed {
+		panic("Close of closed shout channel")
+	}
 	for k := range s.subscribers {
 		close(k)
 	}
@@ -74,6 +82,7 @@ func (s *Shout) Close() {
 	//close(s.send) might be processed by run() first, causing a panic.
 	s.done <- struct{}{}
 	close(s.send)
+	s.closed = true
 }
 
 //Listen is a receiving channel for Shout broadcast messages.
@@ -93,8 +102,8 @@ func (c *Listen) Rcv() <-chan interface{} {
 //it, and no other subscribed Listen channels will receive messages.
 //Closing a Shout will also close all subscribed Listens.
 func (c *Listen) Close() {
-	c.s.msub.Lock()
-	defer c.s.msub.Unlock()
+	c.s.m.Lock()
+	defer c.s.m.Unlock()
 	delete(c.s.subscribers, c.rcv)
 	close(c.rcv)
 }

@@ -58,3 +58,25 @@ func TestClose(t *testing.T) {
 		}
 	}
 }
+
+func TestClosePanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected s.Close() to panic")
+		}
+	}()
+	s := shout.New(0)
+	s.Close()
+	s.Close()
+}
+
+func TestListenPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected s.Listen(0) to panic")
+		}
+	}()
+	s := shout.New(0)
+	s.Close()
+	s.Listen(0)
+}
